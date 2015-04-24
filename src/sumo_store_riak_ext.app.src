@@ -1,0 +1,14 @@
+{application, sumo_store_riak_ext,
+ [
+	{description, "Riak specific functionality for Sumo DB stores"},
+	{vsn, "0.0.1"},
+	{modules, []},
+	{registered, []},
+	{applications,
+	 [
+		kernel,
+		stdlib
+	 ]
+	}
+ ]
+}.
