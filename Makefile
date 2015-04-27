@@ -5,7 +5,7 @@ CONFIG ?= test/test.config
 DEPS = mixer sumo_db
 
 dep_mixer   = git git://github.com/inaka/mixer.git   0.1.3
-dep_sumo_db = git git://github.com/inaka/sumo_db.git master
+dep_sumo_db = git git://github.com/inaka/sumo_db.git 0.3.6
 
 DIALYZER_DIRS := ebin/
 DIALYZER_OPTS := --verbose --statistics -Werror_handling \

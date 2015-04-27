@@ -79,6 +79,17 @@ find_by(_Config) ->
       total := 300}
   ] = Results2,
 
+  PO1 = sumo:find(sumo_test_purchase_order, <<"ID1">>),
+  #{id := <<"ID1">>,
+    currency := <<"USD">>,
+    items := [#{part_num := <<"123">>}, #{part_num := <<"456">>}],
+    order_num := <<"O1">>,
+    ship_to := #{city := <<"city">>, country := <<"US">>},
+    bill_to := #{city := <<"city">>, country := <<"US">>},
+    total := 300} = PO1,
+
+  notfound = sumo:find(sumo_test_purchase_order, <<"ID123">>),
+
   ok.
 
 delete_all(_Config) ->
