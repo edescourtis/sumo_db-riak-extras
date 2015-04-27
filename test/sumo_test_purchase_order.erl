@@ -187,5 +187,4 @@ wakeup_item(Item) ->
 
 %% @private
 wakeup_items(Items) ->
-  F = fun({_, V}, Acc) -> [wakeup_item(V) | Acc] end,
-  lists:foldr(F, [], maps:to_list(Items)).
+  [wakeup_item(V) || V <- maps:values(Items)].
