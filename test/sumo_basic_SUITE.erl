@@ -74,7 +74,7 @@ find_by(_Config) ->
       currency := <<"EUR">>,
       items := [#{part_num := <<"123">>}, #{part_num := <<"456">>}],
       order_num := <<"O3">>,
-      ship_to := #{city := <<"city">>, country := <<"US">>},
+      ship_to := #{city := <<"city2">>, country := <<"US">>},
       bill_to := #{city := <<"city">>, country := <<"US">>},
       total := 300}
   ] = Results2,
@@ -89,6 +89,21 @@ find_by(_Config) ->
     total := 300} = PO1,
 
   notfound = sumo:find(sumo_test_purchase_order, <<"ID123">>),
+
+  Results3 = sumo:find_by(
+    sumo_test_purchase_order, [{'ship_to.city', <<"city2">>}]),
+  1 = length(Results3),
+  Results2 = Results3,
+
+  Results4 = sumo:find_by(
+    sumo_test_purchase_order,
+    [{'ship_to.city', <<"city2">>}, {currency, <<"USD">>}]),
+  0 = length(Results4),
+
+  Results5 = sumo:find_by(
+    sumo_test_purchase_order,
+    [{'ship_to.city', <<"city">>}, {currency, <<"USD">>}]),
+  2 = length(Results5),
 
   ok.
 
@@ -118,6 +133,8 @@ init_store() ->
 
   Addr = sumo_test_purchase_order:new_address(
     <<"line1">>, <<"line2">>, <<"city">>, <<"state">>, <<"zip">>, <<"US">>),
+  Addr2 = sumo_test_purchase_order:new_address(
+    <<"line1">>, <<"line2">>, <<"city2">>, <<"state">>, <<"zip">>, <<"US">>),
   Item1 = sumo_test_purchase_order:new_item(<<"123">>, <<"p1">>, 1, 100, 100),
   Item2 = sumo_test_purchase_order:new_item(<<"456">>, <<"p2">>, 2, 100, 200),
   Items = [Item1, Item2],
@@ -127,7 +144,7 @@ init_store() ->
   PO2 = sumo_test_purchase_order:new(
     <<"ID2">>, <<"O2">>, Date, Addr, Addr, Items, <<"USD">>, 300),
   PO3 = sumo_test_purchase_order:new(
-    <<"ID3">>, <<"O3">>, Date, Addr, Addr, Items, <<"EUR">>, 300),
+    <<"ID3">>, <<"O3">>, Date, Addr2, Addr, Items, <<"EUR">>, 300),
 
   sumo:persist(sumo_test_purchase_order, PO1),
   sumo:persist(sumo_test_purchase_order, PO2),
