@@ -101,7 +101,6 @@ search_keys_by(Conn, Index, Query, Limit, Offset) ->
   case sumo_store_riak:search(Conn, Index, Query, Limit, Offset) of
     {ok, {search_results, Results, _, Total}} ->
       F = fun({_, KV}, Acc) ->
-            lager:notice("> ~p~n", [KV]),
             {_, K} = lists:keyfind(<<"_yz_rk">>, 1, KV),
             [K | Acc]
           end,
