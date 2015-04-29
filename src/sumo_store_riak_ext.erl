@@ -20,7 +20,7 @@
 
 -include_lib("riakc/include/riakc.hrl").
 
--export([find_by/3, find_by/5]).
+-export([find_by/3, find_by/5, build_key/1]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Types.
@@ -79,7 +79,7 @@ find_by(DocName,
           {error, Error, State}
       end;
     _ ->
-      Query = sumo_store_riak:build_query(Conditions),
+      Query = build_query(Conditions),
       case search_keys_by(Conn, Index, Query, Limit, Offset) of
         {ok, {_, Keys}} ->
           Results = sumo_store_riak:fetch_docs(
@@ -101,6 +101,7 @@ search_keys_by(Conn, Index, Query, Limit, Offset) ->
   case sumo_store_riak:search(Conn, Index, Query, Limit, Offset) of
     {ok, {search_results, Results, _, Total}} ->
       F = fun({_, KV}, Acc) ->
+            lager:notice("> ~p~n", [KV]),
             {_, K} = lists:keyfind(<<"_yz_rk">>, 1, KV),
             [K | Acc]
           end,
@@ -109,3 +110,68 @@ search_keys_by(Conn, Index, Query, Limit, Offset) ->
     {error, Error} ->
       {error, Error}
   end.
+
+%% @private
+build_query([]) ->
+  <<"*:*">>;
+build_query(PL) when is_list(PL) ->
+  build_query1(PL, <<"">>);
+build_query(_) ->
+  <<"*:*">>.
+
+%% @private
+to_bin(Data) when is_integer(Data) ->
+  integer_to_binary(Data);
+to_bin(Data) when is_float(Data) ->
+  float_to_binary(Data);
+to_bin(Data) when is_atom(Data) ->
+  atom_to_binary(Data, utf8);
+to_bin(Data) when is_list(Data) ->
+  iolist_to_binary(Data);
+to_bin(Data) ->
+  Data.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Private API - Query Builder.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% @private
+build_query1([], Acc) ->
+  Acc;
+build_query1([{_, [{_, _} | _T0]} = KV | T], <<"">>) ->
+  build_query1(T, binary:list_to_bin(["(", build_query2(KV), ")"]));
+build_query1([{_, [{_, _} | _T0]} = KV | T], Acc) ->
+  build_query1(T, binary:list_to_bin([Acc, " AND (", build_query2(KV), ")"]));
+build_query1([{K, V} | T], <<"">>) ->
+  build_query1(T, <<(query_eq(K, V))/binary>>);
+build_query1([{K, V} | T], Acc) ->
+  build_query1(T, binary:list_to_bin([Acc, " AND ", query_eq(K, V)])).
+
+%% @private
+build_query2({K, [{_, _} | _T] = V}) ->
+  F = fun({K_, V_}, Acc) ->
+        Eq = binary:list_to_bin([build_key(K_), V_]),
+        case Acc of
+          <<"">> -> Eq;
+          _      -> binary:list_to_bin([Acc, " ", K, " ", Eq])
+        end
+      end,
+  lists:foldl(F, <<"">>, V).
+
+%% @private
+query_eq(K, V) ->
+  binary:list_to_bin([build_key(K), V]).
+
+%% @private
+build_key(K) ->
+  build_key(binary:split(to_bin(K), <<".">>, [global]), <<"">>).
+
+%% @private
+build_key([K], <<"">>) ->
+  binary:list_to_bin([K, "_register:"]);
+build_key([K], Acc) ->
+  binary:list_to_bin([Acc, ".", K, "_register:"]);
+build_key([K | T], <<"">>) ->
+  build_key(T, binary:list_to_bin([K, "_map"]));
+build_key([K | T], Acc) ->
+  build_key(T, binary:list_to_bin([Acc, ".", K, "_map"])).
