@@ -3,38 +3,38 @@
 -behaviour(sumo_doc).
 
 -opaque address() ::
-#{
-  line1    => binary(),
-  line2    => binary(),
-  city     => binary(),
-  state    => binary(),
-  zip_code => binary(),
-  country  => binary()
-}.
+  #{
+    line1    => binary(),
+    line2    => binary(),
+    city     => binary(),
+    state    => binary(),
+    zip_code => binary(),
+    country  => binary()
+  }.
 
 -opaque item() ::
-#{
-  part_num      => binary(),
-  product_name  => binary(),
-  quantity      => pos_integer(),
-  unit_price    => pos_integer(),
-  price         => pos_integer()
-}.
+  #{
+    part_num      => binary(),
+    product_name  => binary(),
+    quantity      => pos_integer(),
+    unit_price    => pos_integer(),
+    price         => pos_integer()
+  }.
 -type items() :: [item()].
 
 -opaque purchase_order() ::
-#{
-  id          => binary(),
-  created_at  => binary(),
-  order_num   => binary(),
-  po_date     => binary(),
-  ship_to     => address(),
-  bill_to     => address(),
-  items       => items(),
-  currency    => binary(),
-  total       => pos_integer()
-}.
--export_type([purchase_order/0, address/0, items/0]).
+  #{
+    id          => binary(),
+    created_at  => binary(),
+    order_num   => binary(),
+    po_date     => binary(),
+    ship_to     => address(),
+    bill_to     => address(),
+    items       => items(),
+    currency    => binary(),
+    total       => pos_integer()
+  }.
+-export_type([purchase_order/0, address/0, item/0, items/0]).
 
 -export([new/8, id/1, id/2, items/1, items/2, currency/1, currency/2,
          order_num/1, order_num/2]).
