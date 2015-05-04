@@ -43,7 +43,14 @@ end_per_suite(Config) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 find_all(_Config) ->
-  3 = length(sumo:find_all(sumo_test_purchase_order)).
+  3 = length(sumo:find_all(sumo_test_purchase_order)),
+
+  All1 = sumo:find_all(sumo_test_purchase_order, [], 2, 0),
+  2 = length(All1),
+  All2 = sumo:find_all(sumo_test_purchase_order, [], 10, 2),
+  1 = length(All2),
+
+  ok.
 
 find_by(_Config) ->
   Results1 = sumo:find_by(sumo_test_purchase_order, [{currency, <<"USD">>}]),
@@ -114,9 +121,8 @@ delete_all(_Config) ->
 delete(_Config) ->
   %% delete_by
   2 = sumo:delete_by(sumo_test_purchase_order, [{currency, <<"USD">>}]),
-  timer:sleep(5000),
+  sync_timeout(1),
   Results = sumo:find_by(sumo_test_purchase_order, [{currency, <<"USD">>}]),
-
   0 = length(Results),
 
   %% delete
@@ -130,6 +136,7 @@ delete(_Config) ->
 init_store() ->
   sumo:create_schema(sumo_test_purchase_order),
   sumo:delete_all(sumo_test_purchase_order),
+  sync_timeout(0),
 
   Addr = sumo_test_purchase_order:new_address(
     <<"line1">>, <<"line2">>, <<"city">>, <<"state">>, <<"zip">>, <<"US">>),
@@ -150,5 +157,9 @@ init_store() ->
   sumo:persist(sumo_test_purchase_order, PO2),
   sumo:persist(sumo_test_purchase_order, PO3),
 
-  %% Sync Timeout.
-  timer:sleep(5000).
+  sync_timeout(3).
+
+sync_timeout(Len) ->
+  ktn_task:wait_for(
+    fun() -> length(sumo:find_by(sumo_test_purchase_order, [])) end,
+    Len, 500, 10).
