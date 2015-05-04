@@ -12,7 +12,6 @@
           delete_all/2,
           find_by/6,
           find_all/2,
-          find_all/5,
           create_schema/2
          ]
         }
@@ -20,7 +19,7 @@
 
 -include_lib("riakc/include/riakc.hrl").
 
--export([find_by/3, find_by/5, build_key/1]).
+-export([find_all/5, find_by/3, find_by/5, build_key/1]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Types.
@@ -43,6 +42,17 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% External API.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+-spec find_all(
+  sumo:schema_name(),
+  term(),
+  non_neg_integer(),
+  non_neg_integer(),
+  state()
+) -> sumo_store:result([sumo_internal:doc()], state()).
+find_all(DocName, _SortFields, Limit, Offset, State) ->
+  %% @todo implement search with sort parameters.
+  find_by(DocName, [], Limit, Offset, State).
 
 -spec find_by(
   sumo:schema_name(), sumo:conditions(), state()
