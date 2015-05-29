@@ -19,7 +19,7 @@
 
 -include_lib("riakc/include/riakc.hrl").
 
--export([find_all/5, find_by/3, find_by/5, build_key/1]).
+-export([find_all/5, find_by/3, find_by/5]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Types.
@@ -67,19 +67,15 @@ find_by(DocName, Conditions, State) ->
   non_neg_integer(),
   state()
 ) -> sumo_store:result([sumo_internal:doc()], state()).
-find_by(DocName,
-        Conditions,
-        Limit,
-        Offset,
+find_by(DocName, Conditions, Limit, Offset,
         #state{conn = Conn,
                bucket = Bucket,
                index = Index,
-               get_opts = Opts} = State) ->
+               get_opts = Opts} = State) when is_list(Conditions) ->
   IdField = sumo_internal:id_field_name(DocName),
   case lists:keyfind(IdField, 1, Conditions) of
     {_K, Key} ->
-      BinKey = iolist_to_binary(Key),
-      case sumo_store_riak:fetch_map(Conn, Bucket, BinKey, Opts) of
+      case sumo_store_riak:fetch_map(Conn, Bucket, to_bin(Key), Opts) of
         {ok, RMap} ->
           Val = sumo_store_riak:rmap_to_doc(DocName, RMap),
           {ok, [Val], State};
@@ -89,7 +85,7 @@ find_by(DocName,
           {error, Error, State}
       end;
     _ ->
-      Query = build_query(Conditions),
+      Query = sumo_store_riak:build_query(Conditions),
       case search_keys_by(Conn, Index, Query, Limit, Offset) of
         {ok, {_, Keys}} ->
           Results = sumo_store_riak:fetch_docs(
@@ -97,6 +93,19 @@ find_by(DocName,
           {ok, Results, State};
         {error, Error} -> {error, Error, State}
       end
+  end;
+find_by(DocName, Conditions, Limit, Offset,
+        #state{conn = Conn,
+               bucket = Bucket,
+               index = Index,
+               get_opts = Opts} = State) ->
+  Query = sumo_store_riak:build_query(Conditions),
+  case search_keys_by(Conn, Index, Query, Limit, Offset) of
+    {ok, {_, Keys}} ->
+      Results = sumo_store_riak:fetch_docs(
+        DocName, Conn, Bucket, Keys, Opts),
+      {ok, Results, State};
+    {error, Error} -> {error, Error, State}
   end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -121,14 +130,6 @@ search_keys_by(Conn, Index, Query, Limit, Offset) ->
   end.
 
 %% @private
-build_query([]) ->
-  <<"*:*">>;
-build_query(PL) when is_list(PL) ->
-  build_query1(PL, <<"">>);
-build_query(_) ->
-  <<"*:*">>.
-
-%% @private
 to_bin(Data) when is_integer(Data) ->
   integer_to_binary(Data);
 to_bin(Data) when is_float(Data) ->
@@ -139,48 +140,3 @@ to_bin(Data) when is_list(Data) ->
   iolist_to_binary(Data);
 to_bin(Data) ->
   Data.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% Private API - Query Builder.
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-%% @private
-build_query1([], Acc) ->
-  Acc;
-build_query1([{_, [{_, _} | _T0]} = KV | T], <<"">>) ->
-  build_query1(T, binary:list_to_bin(["(", build_query2(KV), ")"]));
-build_query1([{_, [{_, _} | _T0]} = KV | T], Acc) ->
-  build_query1(T, binary:list_to_bin([Acc, " AND (", build_query2(KV), ")"]));
-build_query1([{K, V} | T], <<"">>) ->
-  build_query1(T, <<(query_eq(K, V))/binary>>);
-build_query1([{K, V} | T], Acc) ->
-  build_query1(T, binary:list_to_bin([Acc, " AND ", query_eq(K, V)])).
-
-%% @private
-build_query2({K, [{_, _} | _T] = V}) ->
-  F = fun({K_, V_}, Acc) ->
-        Eq = binary:list_to_bin([build_key(K_), V_]),
-        case Acc of
-          <<"">> -> Eq;
-          _      -> binary:list_to_bin([Acc, " ", K, " ", Eq])
-        end
-      end,
-  lists:foldl(F, <<"">>, V).
-
-%% @private
-query_eq(K, V) ->
-  binary:list_to_bin([build_key(K), V]).
-
-%% @private
-build_key(K) ->
-  build_key(binary:split(to_bin(K), <<".">>, [global]), <<"">>).
-
-%% @private
-build_key([K], <<"">>) ->
-  binary:list_to_bin([K, "_register:"]);
-build_key([K], Acc) ->
-  binary:list_to_bin([Acc, ".", K, "_register:"]);
-build_key([K | T], <<"">>) ->
-  build_key(T, binary:list_to_bin([K, "_map"]));
-build_key([K | T], Acc) ->
-  build_key(T, binary:list_to_bin([Acc, ".", K, "_map"])).
