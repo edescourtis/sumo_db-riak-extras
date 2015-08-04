@@ -54,58 +54,95 @@ find_all(DocName, _SortFields, Limit, Offset, State) ->
   %% @todo implement search with sort parameters.
   find_by(DocName, [], Limit, Offset, State).
 
+%% find_by may be used in two ways: either with a given limit and offset or not
+%% If a limit and offset is not given, then the atom 'undefined' is used as a
+%% marker to indicate that the store should find out how many keys matching the
+%% query exist, and then obtain results for all of them.
+%% This is done to overcome Solr's defaulta pagination value of 10.
 -spec find_by(
   sumo:schema_name(), sumo:conditions(), state()
 ) -> sumo_store:result([sumo_internal:doc()], state()).
 find_by(DocName, Conditions, State) ->
-  find_by(DocName, Conditions, 0, 0, State).
+  find_by(DocName, Conditions, undefined, undefined, State).
 
 -spec find_by(
   sumo:schema_name(),
   sumo:conditions(),
-  non_neg_integer(),
-  non_neg_integer(),
+  undefined | non_neg_integer(),
+  undefined | non_neg_integer(),
   state()
 ) -> sumo_store:result([sumo_internal:doc()], state()).
-find_by(DocName, Conditions, Limit, Offset,
-        #state{conn = Conn,
-               bucket = Bucket,
-               index = Index,
-               get_opts = Opts} = State) when is_list(Conditions) ->
+
+find_by(DocName, Conditions, Limit, Offset, State) when is_list(Conditions) ->
   IdField = sumo_internal:id_field_name(DocName),
+  %% If the key field is present in the conditions, we are looking for a
+  %% particular document. If not, it is a general query.
   case lists:keyfind(IdField, 1, Conditions) of
     {_K, Key} ->
-      case sumo_store_riak:fetch_map(Conn, Bucket, to_bin(Key), Opts) of
-        {ok, RMap} ->
-          Val = sumo_store_riak:rmap_to_doc(DocName, RMap),
-          {ok, [Val], State};
-        {error, {notfound, _}} ->
-          {ok, [], State};
-        {error, Error} ->
-          {error, Error, State}
-      end;
+      find_by_id_field(DocName, Key, State);
     _ ->
-      Query = sumo_store_riak:build_query(Conditions),
-      case search_keys_by(Conn, Index, Query, Limit, Offset) of
-        {ok, {_, Keys}} ->
-          Results = sumo_store_riak:fetch_docs(
-            DocName, Conn, Bucket, Keys, Opts),
-          {ok, Results, State};
-        {error, Error} -> {error, Error, State}
-      end
+      find_by_query(DocName, Conditions, Limit, Offset, State)
   end;
-find_by(DocName, Conditions, Limit, Offset,
-        #state{conn = Conn,
-               bucket = Bucket,
-               index = Index,
-               get_opts = Opts} = State) ->
+find_by(DocName, Conditions, Limit, Offset, State) ->
+  find_by_query(DocName, Conditions, Limit, Offset, State).
+
+find_by_id_field(DocName, Key, State) ->
+  #state{conn = Conn, bucket = Bucket, get_opts = Opts} = State,
+  case sumo_store_riak:fetch_map(Conn, Bucket, to_bin(Key), Opts) of
+    {ok, RMap} ->
+      Val = sumo_store_riak:rmap_to_doc(DocName, RMap),
+      {ok, [Val], State};
+    {error, {notfound, _}} ->
+      {ok, [], State};
+    {error, Error} ->
+      {error, Error, State}
+  end.
+
+find_by_query(DocName, Conditions, undefined, undefined, State) ->
+  %% First get all keys matching the query, and then obtain documents for those
+  %% keys.
+  #state{conn = Conn, bucket = Bucket, index = Index, get_opts = Opts} = State,
+  Query = sumo_store_riak:build_query(Conditions),
+  case find_by_query_get_keys(Conn, Index, Query) of
+    {ok, Keys} ->
+      Results = sumo_store_riak:fetch_docs(DocName, Conn, Bucket, Keys, Opts),
+      {ok, Results, State};
+    {error, Error} ->
+      {error, Error, State}
+  end;
+
+find_by_query(DocName, Conditions, Limit, Offset, State) ->
+  %% Limit and offset were specified so we return a possibly partial result set.
+  #state{conn = Conn, bucket = Bucket, index = Index, get_opts = Opts} = State,
   Query = sumo_store_riak:build_query(Conditions),
   case search_keys_by(Conn, Index, Query, Limit, Offset) of
-    {ok, {_, Keys}} ->
-      Results = sumo_store_riak:fetch_docs(
-        DocName, Conn, Bucket, Keys, Opts),
+    {ok, {_Total, Keys}} ->
+      Results = sumo_store_riak:fetch_docs(DocName, Conn, Bucket, Keys, Opts),
       {ok, Results, State};
-    {error, Error} -> {error, Error, State}
+    {error, Error} ->
+      {error, Error, State}
+  end.
+
+find_by_query_get_keys(Conn, Index, Query) ->
+  InitialResults =
+    case search_keys_by(Conn, Index, Query, 0, 0) of
+      {ok, {Total, Keys}} -> {ok, length(Keys), Total, Keys};
+      Error               -> Error
+    end,
+  case InitialResults of
+    {ok, ResultCount, Total1, Keys1} when ResultCount < Total1 ->
+      Limit  = Total1 - ResultCount,
+      Offset = ResultCount,
+      case search_keys_by(Conn, Index, Query, Limit, Offset) of
+        {ok, {Total1, Keys2}} ->
+          {ok, lists:append(Keys1, Keys2)};
+        {error, Error1} ->
+          {error, Error1}
+      end;
+    {ok, _ResultCount, _Total, Keys1}  ->
+      {ok, Keys1};
+    {error, Error2} ->
+      {error, Error2}
   end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
