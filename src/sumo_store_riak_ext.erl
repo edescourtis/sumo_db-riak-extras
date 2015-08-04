@@ -124,25 +124,26 @@ find_by_query(DocName, Conditions, Limit, Offset, State) ->
   end.
 
 find_by_query_get_keys(Conn, Index, Query) ->
+  InitialResults =
     case search_keys_by(Conn, Index, Query, 0, 0) of
-      {ok, {Total, Keys1}} ->
-        ResultCount = length(Keys1),
-        case ResultCount < Total of
-          true ->
-            Limit  = Total - ResultCount,
-            Offset = ResultCount,
-            case search_keys_by(Conn, Index, Query, Limit, Offset) of
-              {ok, {Total, Keys2}} ->
-                {ok, lists:append(Keys1, Keys2)};
-              {error, Error1} ->
-                {error, Error1}
-            end;
-          false ->
-            {ok, Keys1}
-        end;
-      {error, Error2} ->
-        {error, Error2}
-    end.
+      {ok, {Total, Keys}} -> {ok, length(Keys), Total, Keys};
+      Error               -> Error
+    end,
+  case InitialResults of
+    {ok, ResultCount, Total1, Keys1} when ResultCount < Total1 ->
+      Limit  = Total1 - ResultCount,
+      Offset = ResultCount,
+      case search_keys_by(Conn, Index, Query, Limit, Offset) of
+        {ok, {Total1, Keys2}} ->
+          {ok, lists:append(Keys1, Keys2)};
+        {error, Error1} ->
+          {error, Error1}
+      end;
+    {ok, _ResultCount, _Total, Keys1}  ->
+      {ok, Keys1};
+    {error, Error2} ->
+      {error, Error2}
+  end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Private API.
