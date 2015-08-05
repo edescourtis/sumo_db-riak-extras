@@ -17,7 +17,7 @@ include erlang.mk
 ERLC_OPTS += +'{parse_transform, lager_transform}' +debug_info
 
 TEST_ERLC_OPTS += +'{parse_transform, lager_transform}' +debug_info
-CT_SUITES = sumo_basic
+CT_SUITES = sumo_store_riak
 CT_OPTS = -cover test/sumo.coverspec -erl_args -config ${CONFIG}
 
 SHELL_OPTS = -name ${PROJECT}@`hostname` -s ${PROJECT} -config ${CONFIG} -s sync

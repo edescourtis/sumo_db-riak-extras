@@ -1,4 +1,4 @@
--module(sumo_basic_SUITE).
+-module(sumo_store_riak_SUITE).
 
 -export([
          all/0,
